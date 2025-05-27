@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState , useEffect} from 'react';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import Toast from './Toast';
 import '@tensorflow/tfjs';
+import { useLocation } from 'react-router-dom';
 
 export default function WebcamSection({ darkMode }) {
   const videoRef = useRef();
@@ -10,27 +11,35 @@ export default function WebcamSection({ darkMode }) {
   const [toast, setToast] = useState('');
   const [toastMessage, setToastMessage] = useState(null);
 
+  const location = useLocation(); // 👈 Get current route
+
   const startWebcam = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    videoRef.current.srcObject = stream;
-    setStreaming(true);
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      setStreaming(true);
+    }
   };
 
   const stopWebcam = () => {
-    const stream = videoRef.current.srcObject;
-    stream.getTracks().forEach(track => track.stop());
-    videoRef.current.srcObject = null;
-    setStreaming(false);
+     console.log("Stopping webcam..."); 
+    const videoElement = videoRef.current;
+    if (videoElement && videoElement.srcObject) {
+      const stream = videoElement.srcObject;
+      stream.getTracks().forEach(track => track.stop());
+      videoElement.srcObject = null;
+      setStreaming(false);
+    }
   };
 
   const handleClassify = async () => {
     setLoading(true);
     const model = await cocoSsd.load();
     const predictions = await model.detect(videoRef.current);
-    
+
     setToastMessage(`Detected: ${predictions[0]?.class || 'unknown'} (${Math.round((predictions[0]?.score || 0) * 100)}%)`);
     setTimeout(() => setToastMessage(null), 2000);
-    // Store to history
+
     const stored = JSON.parse(localStorage.getItem('predictionHistory') || '[]');
     localStorage.setItem('predictionHistory', JSON.stringify([...stored, {
       type: 'webcam',
@@ -38,7 +47,6 @@ export default function WebcamSection({ darkMode }) {
       predictions
     }]));
 
-    // Format toast message
     if (predictions.length === 0) {
       setToast("No objects detected.");
     } else {
@@ -51,6 +59,12 @@ export default function WebcamSection({ darkMode }) {
     setTimeout(() => setToast(''), 4000);
     setLoading(false);
   };
+
+  // 👇 Listen for route change and stop webcam if active
+  useEffect(() => {
+    stopWebcam(); // cleanup on route change or unmount
+    return () => stopWebcam();
+  }, [location]);
 
   return (
     <div className={`p-4 rounded-lg relative ${darkMode ? 'bg-green-900 text-white' : 'bg-green-100'}`}>
@@ -95,17 +109,6 @@ export default function WebcamSection({ darkMode }) {
           </>
         )}
       </div>
-
-      {/* {toast && (
-        <div className="fixed bottom-4 right-4 bg-black text-white px-4 py-2 rounded shadow-lg z-50 text-sm">
-          {toast}
-        </div>
-      )} */}
-      {/* {toastMessage && (
-        <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-50">
-          <Toast message={toastMessage} />
-        </div>
-      )} */}
     </div>
   );
 }
